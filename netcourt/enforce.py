@@ -32,7 +32,7 @@ def run(db,x):
         rollout=one(db,"SELECT * FROM rollouts WHERE id=? AND status='pending'",(x['id'],))
         if not rollout:return {'decision':'not_pending'}
         revision=one(db,"SELECT * FROM revisions WHERE id=? AND status='ready'",(rollout['revision'],))
-        topology=one(db,'SELECT MAX(generation) AS g FROM services')['g'] or 0
+        topology=one(db,'SELECT version FROM topology_clock WHERE id=1')['version']
         if not revision or revision['topology_version']!=topology:
             return {'decision':'stale_policy_or_topology'}
         missing=rows(db,"SELECT node FROM members WHERE rollout=? AND status!='confirmed'",(x['id'],))
@@ -50,11 +50,21 @@ def run(db,x):
         db.execute('INSERT INTO active_policies VALUES(?,?) ON CONFLICT(service) DO UPDATE SET revision=excluded.revision',(revision['service'],revision['id']))
         db.execute("UPDATE rollouts SET status='active' WHERE id=?",(x['id'],))
         return {'decision':'active'}
+    if op=='rollback_receipt':
+        case=one(db,"SELECT * FROM rollback_cases WHERE id=? AND status='open'",(x['rollout'],))
+        member=one(db,'SELECT * FROM members WHERE rollout=? AND node=?',(x['rollout'],x['node']))
+        rollout=one(db,'SELECT * FROM rollouts WHERE id=?',(x['rollout'],))
+        if not case or not member or not rollout or member['generation']!=x['generation'] or x['prior']!=rollout['prior']:
+            return {'decision':'invalid_rollback_receipt'}
+        db.execute('INSERT INTO rollback_receipts VALUES(?,?,?,?,?,?)',(x['id'],x['rollout'],x['node'],x['generation'],x['prior'],'confirmed'))
+        return {'decision':'rollback_confirmed'}
     if op=='rollback':
         case=one(db,"SELECT * FROM rollback_cases WHERE id=? AND status='open'",(x['id'],))
         rollout=one(db,'SELECT * FROM rollouts WHERE id=?',(x['id'],))
         if not case or not rollout:return {'decision':'no_rollback_case'}
-        if not x['confirmed_nodes'] or set(x['confirmed_nodes'])!={m['node'] for m in rows(db,'SELECT node FROM members WHERE rollout=?',(x['id'],))}:
+        members={m['node'] for m in rows(db,'SELECT node FROM members WHERE rollout=?',(x['id'],))}
+        confirmed={m['node'] for m in rows(db,"SELECT node FROM rollback_receipts WHERE rollout=? AND status='confirmed'",(x['id'],))}
+        if confirmed!=members:
             return {'decision':'partial_rollback'}
         if rollout['prior']:
             service=one(db,'SELECT service FROM revisions WHERE id=?',(rollout['revision'],))['service']

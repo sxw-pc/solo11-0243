@@ -11,7 +11,7 @@ def run(db,x):
         if old:return {'decision':'revision_identity_conflict'}
         latest=one(db,'SELECT MAX(generation) AS g FROM revisions WHERE service=?',(x['service'],))
         if x['generation']<=(latest['g'] or 0):return {'decision':'stale_revision'}
-        topo=one(db,'SELECT MAX(generation) AS g FROM services')['g'] or 0
+        topo=one(db,'SELECT version FROM topology_clock WHERE id=1')['version']
         db.execute('INSERT INTO revisions VALUES(?,?,?,?,?)',(x['id'],x['service'],x['generation'],'draft',topo))
         return {'decision':'draft'}
     if op=='rule':
@@ -38,7 +38,7 @@ def run(db,x):
     if op=='check':
         r=one(db,"SELECT * FROM revisions WHERE id=? AND status='draft'",(x['id'],))
         if not r:return {'decision':'not_draft'}
-        topo=one(db,'SELECT MAX(generation) AS g FROM services')['g'] or 0
+        topo=one(db,'SELECT version FROM topology_clock WHERE id=1')['version']
         if topo!=r['topology_version']:return {'decision':'stale_topology'}
         active=rows(db,"SELECT * FROM intents WHERE status='active'")
         missing=[]

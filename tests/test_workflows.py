@@ -53,6 +53,7 @@ class NetworkTests(unittest.TestCase):
   self.step('enforce',op='observe',id='badflow',rollout='roll2',caller='api',callee='db',port=5432,protocol='tcp',allowed=False,at=22)
   self.assertEqual(self.step('enforce',op='complete',id='roll2')['decision'],'rollback_pending')
   self.assertEqual(self.step('enforce',op='rollback',id='roll2',confirmed_nodes=[])['decision'],'partial_rollback')
+  self.assertEqual(self.step('enforce',op='rollback_receipt',id='rb1',rollout='roll2',node='n1',generation=2,prior='rev1')['decision'],'rollback_confirmed')
   self.assertEqual(self.step('enforce',op='rollback',id='roll2',confirmed_nodes=['n1'])['decision'],'rolled_back')
   self.assertEqual(one(self.db,'SELECT revision FROM active_policies WHERE service=?',('api',))['revision'],'rev1')
  def test_topology_change_invalidates_draft(self):
@@ -69,5 +70,11 @@ class NetworkTests(unittest.TestCase):
   self.step('enforce',op='observe',id='flow',rollout='roll',caller='api',callee='db',port=5432,protocol='tcp',allowed=True,at=12)
   self.step('intent',op='service',id='db',tenant='t1',uid='db-new',generation=2)
   self.assertEqual(self.step('enforce',op='complete',id='roll')['decision'],'stale_policy_or_topology')
+ def test_unrelated_high_generation_does_not_hide_topology_change(self):
+  self.base()
+  self.step('intent',op='service',id='other',tenant='t3',uid='o-1',generation=100)
+  self.step('policy',op='draft',id='r',service='api',generation=1)
+  self.step('intent',op='service',id='db',tenant='t1',uid='db-new',generation=2)
+  self.assertEqual(self.step('policy',op='check',id='r')['decision'],'stale_topology')
 
 if __name__=='__main__':unittest.main()

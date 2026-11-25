@@ -3,6 +3,7 @@ from contextlib import contextmanager
 
 SCHEMA="""
 CREATE TABLE IF NOT EXISTS services(id TEXT PRIMARY KEY,tenant TEXT,uid TEXT,generation INTEGER);
+CREATE TABLE IF NOT EXISTS topology_clock(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER);
 CREATE TABLE IF NOT EXISTS contracts(id TEXT PRIMARY KEY,server TEXT,port INTEGER,protocol TEXT,generation INTEGER,status TEXT);
 CREATE TABLE IF NOT EXISTS intents(id TEXT PRIMARY KEY,caller TEXT,callee TEXT,port INTEGER,protocol TEXT,purpose TEXT,generation INTEGER,status TEXT);
 CREATE TABLE IF NOT EXISTS approvals(intent TEXT,actor TEXT,role TEXT,PRIMARY KEY(intent,actor));
@@ -15,12 +16,15 @@ CREATE TABLE IF NOT EXISTS members(rollout TEXT,node TEXT,generation INTEGER,sta
 CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY,rollout TEXT,node TEXT,generation INTEGER,digest TEXT,at INTEGER,status TEXT);
 CREATE TABLE IF NOT EXISTS observations(id TEXT PRIMARY KEY,rollout TEXT,caller TEXT,callee TEXT,port INTEGER,protocol TEXT,allowed INTEGER,at INTEGER);
 CREATE TABLE IF NOT EXISTS rollback_cases(id TEXT PRIMARY KEY,rollout TEXT,status TEXT,reason TEXT);
+CREATE TABLE IF NOT EXISTS rollback_receipts(id TEXT PRIMARY KEY,rollout TEXT,node TEXT,generation INTEGER,prior TEXT,status TEXT);
 CREATE TABLE IF NOT EXISTS active_policies(service TEXT PRIMARY KEY,revision TEXT);
 CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT,subsystem TEXT,payload TEXT,result TEXT);
 """
 def connect(path):
     db=sqlite3.connect(path,isolation_level=None);db.row_factory=sqlite3.Row
-    db.execute('PRAGMA busy_timeout=3000');db.executescript(SCHEMA);return db
+    db.execute('PRAGMA busy_timeout=3000');db.executescript(SCHEMA)
+    db.execute('INSERT OR IGNORE INTO topology_clock VALUES(1,0)')
+    return db
 @contextmanager
 def tx(db):
     db.execute('BEGIN IMMEDIATE')
