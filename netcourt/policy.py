@@ -22,7 +22,8 @@ def run(db,x):
         db.execute('INSERT INTO rules VALUES(?,?,?,?,?,?,?,?)',(x['id'],x['revision'],x['caller'],x['callee'],x['port'],x['protocol'],x['effect'],x['priority']))
         return {'decision':'recorded'}
     if op=='exception':
-        if x['role1']==x['role2'] or x['expires']<=x['at']:return {'decision':'invalid_exception'}
+        if {x['role1'],x['role2']}!={'security','owner'} or x['expires']<=x['at']:
+            return {'decision':'invalid_exception'}
         db.execute('INSERT INTO exceptions VALUES(?,?,?,?,?,?,0)',(x['id'],x['caller'],x['callee'],x['role1'],x['role2'],x['expires']))
         return {'decision':'approved'}
     if op=='simulate':

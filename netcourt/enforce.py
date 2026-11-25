@@ -39,6 +39,15 @@ def run(db,x):
         if missing:return {'decision':'missing_receipts','nodes':[m['node'] for m in missing]}
         if not one(db,'SELECT id FROM observations WHERE rollout=?',(x['id'],)):
             return {'decision':'missing_flow_evidence'}
+        last=one(db,'SELECT MAX(at) AS at FROM observations WHERE rollout=?',(x['id'],))['at']
+        if x['at']<last or x['at']<rollout['started']:
+            return {'decision':'stale_completion_time'}
+        for edge in rows(db,"SELECT DISTINCT i.* FROM intents i JOIN rules r ON r.caller=i.caller AND r.callee=i.callee AND r.port=i.port AND r.protocol=i.protocol WHERE r.revision=? AND r.effect='allow' AND i.status='active'",(rollout['revision'],)):
+            caller=one(db,'SELECT tenant FROM services WHERE id=?',(edge['caller'],))
+            callee=one(db,'SELECT tenant FROM services WHERE id=?',(edge['callee'],))
+            if caller and callee and caller['tenant']!=callee['tenant']:
+                valid=one(db,'SELECT id FROM exceptions WHERE caller=? AND callee=? AND revoked=0 AND expires>=?',(edge['caller'],edge['callee'],x['at']))
+                if not valid:return {'decision':'cross_tenant_exception_expired','intent':edge['id']}
         violations=[]
         for o in rows(db,'SELECT * FROM observations WHERE rollout=?',(x['id'],)):
             expected=verdict(db,rollout['revision'],o['caller'],o['callee'],o['port'],o['protocol'])

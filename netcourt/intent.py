@@ -5,9 +5,9 @@ def edge_valid(db,edge):
     callee=one(db,'SELECT * FROM services WHERE id=?',(edge['callee'],))
     contract=one(db,"SELECT * FROM contracts WHERE server=? AND port=? AND protocol=? AND status='active' ORDER BY generation DESC LIMIT 1",(edge['callee'],edge['port'],edge['protocol']))
     if not caller or not callee or not contract:return False
-    if caller['tenant']!=callee['tenant']:
-        approvals=[x[0] for x in db.execute('SELECT role FROM approvals WHERE intent=?',(edge['id'],))]
-        if len(set(approvals))<2:return False
+    approvals=[dict(x) for x in db.execute('SELECT actor,role FROM approvals WHERE intent=?',(edge['id'],))]
+    if not {'caller','callee'}.issubset({a['role'] for a in approvals}) or len({a['actor'] for a in approvals})<2:
+        return False
     return True
 
 def run(db,x):
@@ -36,6 +36,8 @@ def run(db,x):
         db.execute('INSERT INTO intents VALUES(?,?,?,?,?,?,?,?)',(x['id'],x['caller'],x['callee'],x['port'],x['protocol'],x['purpose'],x['generation'],'proposed'))
         return {'decision':'proposed'}
     if op=='approve':
+        if not one(db,'SELECT id FROM intents WHERE id=?',(x['intent'],)) or x['role'] not in ('caller','callee'):
+            return {'decision':'invalid_edge_approval'}
         db.execute('INSERT OR IGNORE INTO approvals VALUES(?,?,?)',(x['intent'],x['actor'],x['role']))
         return {'decision':'recorded'}
     if op=='activate':

@@ -3,5 +3,7 @@
  {"op":"service","id":"db","tenant":"t1","uid":"db-u1","generation":1},
  {"op":"contract","id":"db-pg","server":"db","port":5432,"protocol":"tcp","generation":1},
  {"op":"propose","id":"edge-a","caller":"api","callee":"db","port":5432,"protocol":"tcp","purpose":"query","generation":1},
+ {"op":"approve","intent":"edge-a","actor":"api-owner","role":"caller"},
+ {"op":"approve","intent":"edge-a","actor":"db-owner","role":"callee"},
  {"op":"activate","id":"edge-a"}
 ]
