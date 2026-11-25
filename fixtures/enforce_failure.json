@@ -1,0 +1,4 @@
+[
+ {"op":"begin","id":"roll2","revision":"rev2","members":[{"node":"n1","generation":2}],"at":20},
+ {"op":"receipt","id":"bad-receipt","rollout":"roll2","node":"n1","generation":1,"digest":"rev2","at":21}
+]

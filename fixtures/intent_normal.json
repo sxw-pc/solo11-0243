@@ -1,0 +1,7 @@
+[
+ {"op":"service","id":"api","tenant":"t1","uid":"api-u1","generation":1},
+ {"op":"service","id":"db","tenant":"t1","uid":"db-u1","generation":1},
+ {"op":"contract","id":"db-pg","server":"db","port":5432,"protocol":"tcp","generation":1},
+ {"op":"propose","id":"edge-a","caller":"api","callee":"db","port":5432,"protocol":"tcp","purpose":"query","generation":1},
+ {"op":"activate","id":"edge-a"}
+]

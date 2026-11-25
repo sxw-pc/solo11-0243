@@ -1,0 +1,65 @@
+from .store import one,rows
+from .policy import verdict
+
+def run(db,x):
+    op=x['op']
+    if op=='begin':
+        revision=one(db,"SELECT * FROM revisions WHERE id=? AND status='ready'",(x['revision'],))
+        if not revision or not x['members'] or len({m['node'] for m in x['members']})!=len(x['members']):return {'decision':'invalid_rollout'}
+        old=one(db,'SELECT id FROM rollouts WHERE id=?',(x['id'],))
+        if old:return {'decision':'rollout_identity_conflict'}
+        prior=one(db,'SELECT revision FROM active_policies WHERE service=?',(revision['service'],))
+        db.execute('INSERT INTO rollouts VALUES(?,?,?,?,?)',(x['id'],x['revision'],prior['revision'] if prior else None,'pending',x['at']))
+        db.executemany('INSERT INTO members VALUES(?,?,?,?)',[(x['id'],m['node'],m['generation'],'pending') for m in x['members']])
+        return {'decision':'planned','members':len(x['members'])}
+    if op=='receipt':
+        m=one(db,'SELECT * FROM members WHERE rollout=? AND node=?',(x['rollout'],x['node']))
+        r=one(db,'SELECT * FROM rollouts WHERE id=?',(x['rollout'],))
+        if not m or not r or r['status']!='pending' or x['generation']!=m['generation'] or x['digest']!=r['revision']:
+            return {'decision':'stale_receipt'}
+        old=one(db,'SELECT * FROM receipts WHERE id=?',(x['id'],))
+        if old:return {'decision':'reused' if old['node']==x['node'] else 'receipt_conflict'}
+        db.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?,?)',(x['id'],x['rollout'],x['node'],x['generation'],x['digest'],x['at'],'confirmed'))
+        db.execute("UPDATE members SET status='confirmed' WHERE rollout=? AND node=?",(x['rollout'],x['node']))
+        return {'decision':'confirmed'}
+    if op=='observe':
+        rollout=one(db,'SELECT * FROM rollouts WHERE id=?',(x['rollout'],))
+        if not rollout:return {'decision':'unknown_rollout'}
+        expected=verdict(db,rollout['revision'],x['caller'],x['callee'],x['port'],x['protocol'])
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?,?,?,?)',(x['id'],x['rollout'],x['caller'],x['callee'],x['port'],x['protocol'],int(x['allowed']),x['at']))
+        return {'decision':'matched' if (expected=='allow')==bool(x['allowed']) else 'violation','expected':expected}
+    if op=='complete':
+        rollout=one(db,"SELECT * FROM rollouts WHERE id=? AND status='pending'",(x['id'],))
+        if not rollout:return {'decision':'not_pending'}
+        revision=one(db,"SELECT * FROM revisions WHERE id=? AND status='ready'",(rollout['revision'],))
+        topology=one(db,'SELECT MAX(generation) AS g FROM services')['g'] or 0
+        if not revision or revision['topology_version']!=topology:
+            return {'decision':'stale_policy_or_topology'}
+        missing=rows(db,"SELECT node FROM members WHERE rollout=? AND status!='confirmed'",(x['id'],))
+        if missing:return {'decision':'missing_receipts','nodes':[m['node'] for m in missing]}
+        if not one(db,'SELECT id FROM observations WHERE rollout=?',(x['id'],)):
+            return {'decision':'missing_flow_evidence'}
+        violations=[]
+        for o in rows(db,'SELECT * FROM observations WHERE rollout=?',(x['id'],)):
+            expected=verdict(db,rollout['revision'],o['caller'],o['callee'],o['port'],o['protocol'])
+            if (expected=='allow')!=bool(o['allowed']):violations.append(o['id'])
+        if violations:
+            db.execute('INSERT INTO rollback_cases VALUES(?,?,?,?)',(x['id'],x['id'],'open',','.join(violations)))
+            db.execute("UPDATE rollouts SET status='rollback_pending' WHERE id=?",(x['id'],))
+            return {'decision':'rollback_pending','violations':violations}
+        db.execute('INSERT INTO active_policies VALUES(?,?) ON CONFLICT(service) DO UPDATE SET revision=excluded.revision',(revision['service'],revision['id']))
+        db.execute("UPDATE rollouts SET status='active' WHERE id=?",(x['id'],))
+        return {'decision':'active'}
+    if op=='rollback':
+        case=one(db,"SELECT * FROM rollback_cases WHERE id=? AND status='open'",(x['id'],))
+        rollout=one(db,'SELECT * FROM rollouts WHERE id=?',(x['id'],))
+        if not case or not rollout:return {'decision':'no_rollback_case'}
+        if not x['confirmed_nodes'] or set(x['confirmed_nodes'])!={m['node'] for m in rows(db,'SELECT node FROM members WHERE rollout=?',(x['id'],))}:
+            return {'decision':'partial_rollback'}
+        if rollout['prior']:
+            service=one(db,'SELECT service FROM revisions WHERE id=?',(rollout['revision'],))['service']
+            db.execute('INSERT INTO active_policies VALUES(?,?) ON CONFLICT(service) DO UPDATE SET revision=excluded.revision',(service,rollout['prior']))
+        db.execute("UPDATE rollback_cases SET status='closed' WHERE id=?",(x['id'],))
+        db.execute("UPDATE rollouts SET status='rolled_back' WHERE id=?",(x['id'],))
+        return {'decision':'rolled_back'}
+    raise ValueError(op)

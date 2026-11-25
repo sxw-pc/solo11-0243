@@ -1,0 +1,7 @@
+[
+ {"op":"begin","id":"roll1","revision":"rev1","members":[{"node":"n1","generation":1},{"node":"n2","generation":1}],"at":10},
+ {"op":"receipt","id":"r1","rollout":"roll1","node":"n1","generation":1,"digest":"rev1","at":11},
+ {"op":"receipt","id":"r2","rollout":"roll1","node":"n2","generation":1,"digest":"rev1","at":12},
+ {"op":"observe","id":"f1","rollout":"roll1","caller":"api","callee":"db","port":5432,"protocol":"tcp","allowed":true,"at":13},
+ {"op":"complete","id":"roll1"}
+]

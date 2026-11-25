@@ -1,0 +1,5 @@
+[
+ {"op":"draft","id":"rev2","service":"api","generation":2},
+ {"op":"rule","id":"rule2","revision":"rev2","caller":"api","callee":"db","port":9999,"protocol":"tcp","effect":"allow","priority":10},
+ {"op":"check","id":"rev2"}
+]

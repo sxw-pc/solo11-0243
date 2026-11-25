@@ -1,0 +1,4 @@
+[
+ {"op":"service","id":"db","tenant":"t1","uid":"db-u2","generation":2},
+ {"op":"activate","id":"edge-a"}
+]

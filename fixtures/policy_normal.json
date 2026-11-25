@@ -1,0 +1,5 @@
+[
+ {"op":"draft","id":"rev1","service":"api","generation":1},
+ {"op":"rule","id":"rule1","revision":"rev1","caller":"api","callee":"db","port":5432,"protocol":"tcp","effect":"allow","priority":10},
+ {"op":"check","id":"rev1"}
+]
